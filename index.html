@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IEEE-Citation Generator</title>
+
+<!-- Poppins font + jsPDF -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+/* --- Theme & Layout --- */
+:root{
+--accent-1: #FF6FD8;
+--accent-2: #3813C2;
+--glass: rgba(255,255,255,0.10);
+--muted: rgba(255,255,255,0.8);
+}
+*{box-sizing:border-box}
+body{
+margin:0;
+font-family:"Poppins",sans-serif;
+background: linear-gradient(135deg, #d9afd9 0%,#97d9e1 100%);
+min-height:100vh;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:2rem;
+color:white;
+}
+.panel{
+width:100%;
+max-width:1000px;
+background: rgba(255 255 255 / 0.08);
+backdrop-filter: blur(12px);
+border-radius:18px;
+box-shadow:0 10px 40px rgba(0,0,0,0.25);
+padding:1.6rem;
+}
+header{font-weight:700;font-size:1.8rem;margin-bottom:1rem;text-align:center;letter-spacing:0.06em}
+.type-select{display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;justify-content:center}
+.type-select label{
+display:inline-flex;align-items:center;gap:0.5rem;padding:0.5rem 0.9rem;border-radius:10px;
+background: rgba(255 255 255 / 0.07); cursor:pointer; font-weight:600;
+border: 2px solid transparent;
+}
+.type-select input{transform:scale(1.0)}
+.type-select label.selected{background:linear-gradient(90deg, rgba(255,111,216,0.18), rgba(56,19,194,0.12)); border-color: rgba(255,255,255,0.12)}
+form{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.input-group{position:relative;width:100%}
+.input-group.full{grid-column:1 / -1}
+input[type="text"], input[type="url"], input[type="number"], input[type="date"]{
+width:100%; padding:0.9rem 0.9rem; border-radius:10px; border:none;
+background: rgba(255 255 255 / 0.14); color: white; font-weight:600;
+outline:none; box-shadow: inset 0 0 12px rgba(255,111,216,0.08);
+}
+input::placeholder{color: rgba(255,255,255,0.45)}
+label.field-label{
+position:absolute; left:0.9rem; top:-0.7rem; font-size:0.78rem; font-weight:700;
+background: rgba(0,0,0,0.15); padding:0 6px; border-radius:6px; color:var(--muted)
+}
+.controls{display:flex;gap:0.8rem;flex-wrap:wrap;justify-content:center;margin-bottom:1rem}
+button{padding:0.75rem 1rem;border-radius:10px;border:none;font-weight:700;cursor:pointer}
+.btn-primary{background:linear-gradient(45deg,var(--accent-1),var(--accent-2));color:#fff;box-shadow:0 8px 20px rgba(56,19,194,0.18)}
+.btn-ghost{background: rgba(255 255 255 / 0.06); color: white; border:1px solid rgba(255,255,255,0.06)}
+.output{
+background: rgba(255 255 255 / 0.12); border-radius:12px; padding:1rem; color:#fff;
+box-shadow: inset 0 6px 18px rgba(255,111,216,0.05);
+}
+.output h3{margin:0 0 0.6rem 0; text-align:center}
+.citation-text{font-style:italic;line-height:1.45;background: rgba(255 255 255 / 0.04); padding:0.8rem;border-radius:8px;white-space:pre-wrap}
+/* responsive */
+@media(max-width:800px){
+form{grid-template-columns:1fr}
+.input-group.full{grid-column:auto}
+.type-select{justify-content:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="panel" role="application" aria-label="Gen-Z IEEE Citation Generator">
+<header>IEEE-Citation Generator</header>
+
+<!-- type selector -->
+<div class="type-select" role="radiogroup" aria-label="Citation type selector">
+<label data-type="website"><input type="radio" name="ctype" value="website"> Website</label>
+<label data-type="report"><input type="radio" name="ctype" value="report"> Report</label>
+<label data-type="conference"><input type="radio" name="ctype" value="conference"> Conference</label>
+<label data-type="book"><input type="radio" name="ctype" value="book"> Book</label>
+<label data-type="journal"><input type="radio" name="ctype" value="journal"> Journal</label>
+<label data-type="magazine"><input type="radio" name="ctype" value="magazine"> Magazine</label>
+<!-- added types -->
+<label data-type="thesis"><input type="radio" name="ctype" value="thesis"> Thesis</label>
+<label data-type="dataset"><input type="radio" name="ctype" value="dataset"> Dataset</label>
+<label data-type="patent"><input type="radio" name="ctype" value="patent"> Patent</label>
+</div>
+
+<!-- dynamic form -->
+<form id="dynamic-form" autocomplete="off" novalidate></form>
+
+<!-- controls -->
+<div class="controls" role="group" aria-label="Actions">
+<button id="generate-btn" class="btn-primary">Generate</button>
+<button id="copy-btn" class="btn-ghost">Copy</button>
+<button id="clear-btn" class="btn-ghost">Clear All</button>
+<button id="pdf-btn" class="btn-ghost">Download PDF</button>
+</div>
+
+<!-- output -->
+<div class="output" aria-live="polite">
+<h3>Your IEEE Citation</h3>
+<div id="citation-output" class="citation-text" tabindex="0" role="region" aria-label="Generated citation">Select a citation type and fill fields, then click Generate.</div>
+</div>
+</div>
+
+<script>
+/* ====== Field definitions with placeholders & required flags ====== */
+const FIELD_DEFS = {
+website: [
+{ id:'author', label:'Author / Organization', placeholder:'e.g. IEEE', required:false },
+{ id:'title', label:'Page Title', placeholder:'e.g. Understanding AI', required:true },
+{ id:'site', label:'Website Name', placeholder:'e.g. ieee.org', required:true },
+{ id:'url', label:'URL', placeholder:'https://example.com/page', required:true, type:'url' },
+{ id:'accessed', label:'Access Date', placeholder:'YYYY-MM-DD', required:true, type:'date' }
+],
+report: [
+{ id:'author', label:'Author(s)', placeholder:'e.g. J. D. Doe', required:true },
+{ id:'title', label:'Report Title', placeholder:'e.g. Annual Energy Report', required:true },
+{ id:'publisher', label:'Publisher / Agency', placeholder:'e.g. Energy Dept.', required:true },
+{ id:'place', label:'Place of Publication', placeholder:'e.g. New York, NY', required:false },
+{ id:'pages', label:'Page range', placeholder:'e.g. 12-24', required:false },
+{ id:'year', label:'Year', placeholder:'e.g. 2023', required:true, type:'number' }
+],
+conference: [
+{ id:'author', label:'Author(s)', placeholder:'e.g. A. B. Smith', required:true },
+{ id:'title', label:'Paper Title', placeholder:'e.g. Advances in ML', required:true },
+{ id:'conf', label:'Conference Name', placeholder:'e.g. Proc. ICML', required:true },
+{ id:'location', label:'Location', placeholder:'e.g. Paris, France', required:false },
+{ id:'pages', label:'Pages', placeholder:'e.g. 123-130', required:false },
+{ id:'year', label:'Year', placeholder:'e.g. 2024', required:true, type:'number' }
+],
+book: [
+{ id:'author', label:'Author(s)', placeholder:'e.g. C. D. Author', required:true },
+{ id:'title', label:'Book Title', placeholder:'e.g. Intro to AI', required:true },
+{ id:'edition', label:'Edition', placeholder:'e.g. 2nd', required:false },
+{ id:'publisher', label:'Publisher', placeholder:'e.g. Springer', required:true },
+{ id:'year', label:'Year', placeholder:'e.g. 2020', required:true, type:'number' }
+],
+journal: [
+{ id:'author', label:'Author(s)', placeholder:'e.g. E. F. Author', required:true },
+{ id:'title', label:'Article Title', placeholder:'e.g. Quantum Computing', required:true },
+{ id:'journal', label:'Journal Name', placeholder:'e.g. IEEE Trans. Computers', required:true },
+{ id:'volume', label:'Volume', placeholder:'e.g. 12', required:false },
+{ id:'issue', label:'Issue', placeholder:'e.g. 3', required:false },
+{ id:'pages', label:'Pages', placeholder:'e.g. 45-53', required:false },
+{ id:'year', label:'Year', placeholder:'e.g. 2021', required:true, type:'number' }
+],
+magazine: [
+{ id:'author', label:'Author(s)', placeholder:'e.g. G. H.', required:true },
+{ id:'title', label:'Article Title', placeholder:'e.g. AI Today', required:true },
+{ id:'magazine', label:'Magazine Name', placeholder:'e.g. Wired', required:true },
+{ id:'pages', label:'Pages', placeholder:'e.g. 34-36', required:false },
+{ id:'month', label:'Month', placeholder:'e.g. Jun.', required:false },
+{ id:'year', label:'Year', placeholder:'e.g. 2024', required:true, type:'number' }
+],
+// added types:
+thesis: [
+{ id:'author', label:'Author', placeholder:'e.g. S. Student', required:true },
+{ id:'title', label:'Thesis Title', placeholder:'e.g. Deep Learning Thesis', required:true },
+{ id:'degree', label:'Degree', placeholder:'e.g. M.S. thesis / Ph.D. thesis', required:true },
+{ id:'university', label:'University', placeholder:'e.g. MIT', required:true },
+{ id:'year', label:'Year', placeholder:'e.g. 2022', required:true, type:'number' }
+],
+dataset: [
+{ id:'creator', label:'Creator(s)', placeholder:'e.g. J. Researcher', required:false },
+{ id:'title', label:'Dataset Title', placeholder:'e.g. ImageNet Subset', required:true },
+{ id:'version', label:'Version', placeholder:'e.g. v1.0', required:false },
+{ id:'repo', label:'Repository / Publisher', placeholder:'e.g. Zenodo / Kaggle', required:true },
+{ id:'year', label:'Year', placeholder:'e.g. 2020', required:true, type:'number' }
+],
+patent: [
+{ id:'inventor', label:'Inventor(s)', placeholder:'e.g. I. N. Ventor', required:true },
+{ id:'title', label:'Patent Title', placeholder:'e.g. Neural Network Optimizer', required:true },
+{ id:'patentNumber', label:'Patent Number', placeholder:'e.g. US 10,123,456', required:true },
+{ id:'year', label:'Year', placeholder:'e.g. 2019', required:true, type:'number' }
+]
+};
+
+/* ====== UI references ====== */
+const radioLabels = document.querySelectorAll('.type-select label');
+const dynamicForm = document.getElementById('dynamic-form');
+const generateBtn = document.getElementById('generate-btn');
+const copyBtn = document.getElementById('copy-btn');
+const clearBtn = document.getElementById('clear-btn');
+const pdfBtn = document.getElementById('pdf-btn');
+const citationOutput = document.getElementById('citation-output');
+
+let currentType = '';
+let citations = []; // store plain-text citations for PDF & list
+
+/* ====== Helpers ====== */
+function clearFormFields(){
+dynamicForm.innerHTML = '';
+}
+function createInput(field){
+const div = document.createElement('div');
+div.className = 'input-group';
+const full = field.full || false;
+if (full) div.classList.add('full');
+
+const type = field.type || 'text';
+div.innerHTML = `
+<input id="${field.id}" name="${field.id}" type="${type}" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} />
+<label class="field-label" for="${field.id}">${field.label}${field.required ? ' *' : ''}</label>
+`;
+return div;
+}
+function stripTags(s){ return (s||'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(); }
+
+/* ====== Render & radio logic ====== */
+radioLabels.forEach(label=>{
+label.addEventListener('click', ()=> {
+// mark selection visually
+radioLabels.forEach(l=>l.classList.remove('selected'));
+label.classList.add('selected');
+// set radio attr
+const input = label.querySelector('input[type="radio"]');
+input.checked = true;
+// render the fields
+currentType = input.value;
+renderFieldsFor(currentType);
+// reset output message
+citationOutput.textContent = 'Fill fields and click Generate to produce the IEEE citation.';
+});
+});
+
+function renderFieldsFor(type){
+clearFormFields();
+if(!type || !FIELD_DEFS[type]) return;
+FIELD_DEFS[type].forEach(fd=>{
+const el = createInput(fd);
+dynamicForm.appendChild(el);
+});
+// small UX: focus first input
+const first = dynamicForm.querySelector('input');
+if(first) first.focus();
+}
+
+/* ====== Format citation (HTML + plain text) ====== */
+function buildCitation(type){
+const values = {};
+(FIELD_DEFS[type] || []).forEach(f=> {
+const el = document.getElementById(f.id);
+values[f.id] = el ? el.value.trim() : '';
+});
+
+// validation: required fields
+for (const f of FIELD_DEFS[type]) {
+if (f.required && !values[f.id]) {
+alert(`Please fill required field: ${f.label}`);
+return null;
+}
+}
+
+let html = '', text = '';
+
+// helper to add trailing dot cleanly
+function finalize(s){ s = s.trim(); if (!s.endsWith('.')) s = s + '.'; return s; }
+
+switch(type){
+case 'website': {
+// [author,] "title," <em>site</em>. [Online]. Available: url. [Accessed: date].
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.site) parts.push(`<em>${escapeHTML(values.site)}</em>`);
+html = parts.join(', ');
+const rest = [];
+if(values.url) rest.push(`[Online]. Available: ${escapeHTML(values.url)}`);
+if(values.accessed) rest.push(`[Accessed: ${escapeHTML(values.accessed)}]`);
+html = [html, rest.join('. ')].filter(Boolean).join('. ').trim();
+text = stripTags(html) ;
+break;
+}
+
+case 'report': {
+// author, "title," publisher, place, pp. pages, year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.publisher) parts.push(escapeHTML(values.publisher));
+if (values.place) parts.push(escapeHTML(values.place));
+if (values.pages) parts.push(`pp. ${escapeHTML(values.pages)}`);
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'conference': {
+// author, "title," in Proc. conf, location, pp. pages, year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+const proc = values.conf ? `in Proc. ${escapeHTML(values.conf)}` : '';
+if (proc) parts.push(proc);
+if (values.location) parts.push(escapeHTML(values.location));
+if (values.pages) parts.push(`pp. ${escapeHTML(values.pages)}`);
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'book': {
+// author, <em>title</em>, edition ed., publisher, year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`<em>${escapeHTML(values.title)}</em>`);
+if (values.edition) parts.push(`${escapeHTML(values.edition)} ed.`);
+if (values.publisher) parts.push(escapeHTML(values.publisher));
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'journal': {
+// author, "title," <em>journal</em>, vol. x, no. y, pp. pages, year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.journal) parts.push(`<em>${escapeHTML(values.journal)}</em>`);
+const volno = [];
+if (values.volume) volno.push(`vol. ${escapeHTML(values.volume)}`);
+if (values.issue) volno.push(`no. ${escapeHTML(values.issue)}`);
+if (volno.length) parts.push(volno.join(', '));
+if (values.pages) parts.push(`pp. ${escapeHTML(values.pages)}`);
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'magazine': {
+// author, "title," <em>magazine</em>, pp. pages, month year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.magazine) parts.push(`<em>${escapeHTML(values.magazine)}</em>`);
+if (values.pages) parts.push(`pp. ${escapeHTML(values.pages)}`);
+const my = [values.month, values.year].filter(Boolean).join(' ');
+if (my) parts.push(my);
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'thesis': {
+// author, "title," degree thesis, university, year.
+const parts = [];
+if (values.author) parts.push(escapeHTML(values.author));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.degree) parts.push(`${escapeHTML(values.degree)} thesis`);
+if (values.university) parts.push(escapeHTML(values.university));
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'dataset': {
+// creator, <em>title</em>, version, repository, year.
+const parts = [];
+if (values.creator) parts.push(escapeHTML(values.creator));
+if (values.title) parts.push(`<em>${escapeHTML(values.title)}</em>`);
+if (values.version) parts.push(escapeHTML(values.version));
+if (values.repo) parts.push(escapeHTML(values.repo));
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+case 'patent': {
+// inventor, "title," patentNumber, year.
+const parts = [];
+if (values.inventor) parts.push(escapeHTML(values.inventor));
+if (values.title) parts.push(`"${escapeHTML(values.title)}"`);
+if (values.patentNumber) parts.push(escapeHTML(values.patentNumber));
+if (values.year) parts.push(escapeHTML(values.year));
+html = finalize(parts.join(', '));
+text = stripTags(html);
+break;
+}
+
+default:
+html = ''; text = '';
+}
+
+// final cleanup
+html = (html || '').replace(/\s+,/g, ',').replace(/,\s+\./g, '.').trim();
+text = (text || '').replace(/\s+/g,' ').trim();
+if (html && !html.endsWith('.')) html = html + '.';
+if (text && !text.endsWith('.')) text = text + '.';
+
+return { html, text };
+}
+
+/* escape HTML to avoid injection in outputs (we intentionally allow <em> only when added) */
+function escapeHTML(str){
+return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ====== Actions: generate, copy, clear, pdf ====== */
+generateBtn.addEventListener('click', (ev) => {
+ev.preventDefault();
+if (!currentType) { alert('Please select a citation type first.'); return; }
+const citation = buildCitation(currentType);
+if (!citation) return; // validation already alerted
+// citation.html is safe because we escaped values above; we use <em> only from our code.
+citationOutput.innerHTML = citation.html;
+citations.push(citation.text);
+});
+
+copyBtn.addEventListener('click', (ev) => {
+ev.preventDefault();
+const text = citationOutput.innerText || citationOutput.textContent || '';
+if (!text.trim()) { alert('Nothing to copy. Generate a citation first.'); return; }
+navigator.clipboard.writeText(text).then(()=>{
+copyBtn.textContent = 'Copied!';
+setTimeout(()=> copyBtn.textContent = 'Copy', 1400);
+}).catch(()=> alert('Copy failed — allow clipboard access.'));
+});
+
+clearBtn.addEventListener('click', (ev) => {
+ev.preventDefault();
+if (!confirm('Clear all generated citations and reset form?')) return;
+citations = [];
+citationOutput.textContent = 'Select a citation type and fill fields, then click Generate.';
+// reset radio selection and form
+document.querySelectorAll('.type-select input[type=radio]').forEach(r=> r.checked = false);
+radioLabels.forEach(l=> l.classList.remove('selected'));
+currentType = '';
+clearFormFields();
+});
+
+pdfBtn.addEventListener('click', async (ev) => {
+ev.preventDefault();
+if (!citations.length) { alert('No generated citations to export.'); return; }
+const { jsPDF } = window.jspdf;
+const doc = new jsPDF({ unit:'pt', format:'a4' });
+const pageW = doc.internal.pageSize.getWidth();
+const margin = 40;
+let y = 60;
+doc.setFontSize(12);
+doc.text('Generated Citations', margin, 40);
+for (let i=0; i<citations.length; i++){
+const txt = `${i+1}. ${citations[i]}`;
+const split = doc.splitTextToSize(txt, pageW - margin*2);
+if (y + split.length * 14 > doc.internal.pageSize.getHeight() - 40) {
+doc.addPage();
+y = 60;
+}
+doc.text(split, margin, y);
+y += split.length * 14 + 8;
+}
+doc.save('citations.pdf');
+});
+
+/* render initial blank form (helpful UX) */
+function clearFormFields(){ dynamicForm.innerHTML = ''; }
+clearFormFields();
+
+/* allow pressing Enter inside the form to submit (generate) */
+dynamicForm.addEventListener('keydown', (e) => {
+if (e.key === 'Enter') {
+e.preventDefault();
+generateBtn.click();
+}
+});
+
+</script>
+</body>
+</html>
